@@ -7,7 +7,7 @@
     <title>aCayF</title>
     <link href="http://acayf.github.io/feed/" rel="self" />
     <link href="http://webfrogs.github.com" />
-    <lastBuildDate>2016-09-20T22:41:30+08:00</lastBuildDate>
+    <lastBuildDate>2016-09-21T10:54:34+08:00</lastBuildDate>
     <webMaster>ccf.developer@gmail.com</webMaster>
     
     <item>
@@ -16,45 +16,41 @@
       <pubDate>2016-09-20T00:00:00+08:00</pubDate>
       <author>aCayF</author>
       <guid>http://acayf.github.io/2016/09/20/epoll-notes</guid>
-      <content:encoded><![CDATA[<h2>目录</h2>
+      <content:encoded><![CDATA[<h2 id="section">目录</h2>
 
 <ol>
-<li>epoll系统调用
-
-<ul>
-<li>epoll_create</li>
-<li>epoll_ctl</li>
-<li>epoll_wait</li>
-<li>最小示例</li>
-</ul>
-</li>
-<li>epoll实现原理
-
-<ul>
-<li>数据结构</li>
-<li>核心结构体</li>
-<li>关键流程</li>
-</ul>
-</li>
-<li>epoll动态追踪
-
-<ul>
-<li>问题描述</li>
-<li>解决方案</li>
-</ul>
-</li>
+  <li>epoll系统调用
+    <ul>
+      <li>epoll_create</li>
+      <li>epoll_ctl</li>
+      <li>epoll_wait</li>
+      <li>最小示例</li>
+    </ul>
+  </li>
+  <li>epoll实现原理
+    <ul>
+      <li>数据结构</li>
+      <li>核心结构体</li>
+      <li>关键流程</li>
+    </ul>
+  </li>
+  <li>epoll动态追踪
+    <ul>
+      <li>问题描述</li>
+      <li>解决方案</li>
+    </ul>
+  </li>
 </ol>
-
 
 <hr />
 
-<h2>epoll系统调用</h2>
+<h2 id="epoll">epoll系统调用</h2>
 
-<h3>epoll_create</h3>
+<h3 id="epollcreate">epoll_create</h3>
 
-<pre><code>   #include &lt;sys/epoll.h&gt;
+<pre><code class="language-c">#include &lt;sys/epoll.h&gt;
 
-   int epoll_create(int size);
+int epoll_create(int size);
 </code></pre>
 
 <p>功能描述：创建一个epoll实例</p>
@@ -65,11 +61,11 @@
 
 <p>参考链接：<a href="http://man7.org/linux/man-pages/man2/epoll_create.2.html">epoll_create</a></p>
 
-<h3>epoll_ctl</h3>
+<h3 id="epollctl">epoll_ctl</h3>
 
-<pre><code>   #include &lt;sys/epoll.h&gt;
+<pre><code class="language-c">#include &lt;sys/epoll.h&gt;
 
-   int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event);
+int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event);
 </code></pre>
 
 <p>功能描述：添加、删除、修改某一监听事件</p>
@@ -77,35 +73,34 @@
 <p>关键参数说明：</p>
 
 <ul>
-<li>op决定了这次epoll_ctl操作是添加还是删除还是修改</li>
-<li>fd为所要监听事件的文件描述符</li>
-<li><p>event结构体里存放用户定义的与该监听事件相关的信息，可称为用户自定义事件信息，存放与否且存放何种信息完全是用户行为，结构体定义如下</p>
-
-<pre><code> typedef union epoll_data {
-     void        *ptr;
-     int          fd;
-     uint32_t     u32;
-     uint64_t     u64;
- } epoll_data_t;
-
- struct epoll_event {
-     uint32_t     events;      /* Epoll events */
-     epoll_data_t data;        /* User data variable */
- };
-</code></pre></li>
+  <li>op决定了这次epoll_ctl操作是添加还是删除还是修改</li>
+  <li>fd为所要监听事件的文件描述符</li>
+  <li>event结构体里存放用户定义的与该监听事件相关的信息，可称为用户自定义事件信息，存放与否且存放何种信息完全是用户行为，结构体定义如下</li>
 </ul>
 
+<pre><code class="language-c">typedef union epoll_data {
+    void        *ptr;
+    int          fd;
+    uint32_t     u32;
+    uint64_t     u64;
+} epoll_data_t;
+
+struct epoll_event {
+    uint32_t     events;      /* Epoll events */
+    epoll_data_t data;        /* User data variable */
+};
+</code></pre>
 
 <p>返回值：操作成功返回0，操作失败返回-1</p>
 
 <p>参考链接：<a href="http://man7.org/linux/man-pages/man2/epoll_ctl.2.html">epoll_ctl</a></p>
 
-<h3>epoll_wait</h3>
+<h3 id="epollwait">epoll_wait</h3>
 
-<pre><code>   #include &lt;sys/epoll.h&gt;
+<pre><code class="language-c">#include &lt;sys/epoll.h&gt;
 
-   int epoll_wait(int epfd, struct epoll_event *events,
-                  int maxevents, int timeout);
+int epoll_wait(int epfd, struct epoll_event *events,
+               int maxevents, int timeout);
 </code></pre>
 
 <p>功能描述：等待直到有监听事件到达或等待超时或调用被中断，至多返回maxevents个事件</p>
@@ -113,52 +108,39 @@
 <p>关键参数说明：</p>
 
 <ul>
-<li>event指向到达事件对应的用户自定义事件信息，结构体定义如epoll_ctl小节</li>
-<li>timeout设定超时值，为0则不管监听事件到达与否都立即返回，为-1则无限等待直到有监听事件到达</li>
+  <li>event指向到达事件对应的用户自定义事件信息，结构体定义如epoll_ctl小节</li>
+  <li>timeout设定超时值，为0则不管监听事件到达与否都立即返回，为-1则无限等待直到有监听事件到达</li>
 </ul>
-
 
 <p>返回值：返回到达的监听事件数</p>
 
 <p>参考链接：<a href="http://man7.org/linux/man-pages/man2/epoll_wait.2.html">epoll_wait</a></p>
 
-<h3>最小示例</h3>
+<h3 id="section-1">最小示例</h3>
 
 <hr />
 
-<h2>epoll实现原理</h2>
+<h2 id="epoll-1">epoll实现原理</h2>
 
-<h3>数据结构</h3>
-
-<h4>双向循环列表</h4>
-
-<h4>红黑树</h4>
-
-<h3>核心结构体</h3>
-
-<h4>eventpoll</h4>
-
-<h4>epitem</h4>
-
-<h3>关键流程</h3>
-
-<h4>epoll实例管理监听事件</h4>
-
-<h4>epoll实例等待、被唤醒</h4>
-
-<h4>epoll实例返回到达事件</h4>
+<h3 id="section-2">数据结构</h3>
+<h4 id="section-3">双向循环列表</h4>
+<h4 id="section-4">红黑树</h4>
+<h3 id="section-5">核心结构体</h3>
+<h4 id="eventpoll">eventpoll</h4>
+<h4 id="epitem">epitem</h4>
+<h3 id="section-6">关键流程</h3>
+<h4 id="epoll-2">epoll实例管理监听事件</h4>
+<h4 id="epoll-3">epoll实例等待、被唤醒</h4>
+<h4 id="epoll-4">epoll实例返回到达事件</h4>
 
 <hr />
 
-<h2>epoll动态追踪</h2>
+<h2 id="epoll-5">epoll动态追踪</h2>
 
-<h3>追踪目标</h3>
-
-<h4>1. 探测epoll系统调用工作流程</h4>
-
-<h4>2. 探测epoll_wait系统调用，获取到达事件信息</h4>
-
-<h3>解决方案</h3>
+<h3 id="section-7">追踪目标</h3>
+<h4 id="epoll-6">1. 探测epoll系统调用工作流程</h4>
+<h4 id="epollwait-1">2. 探测epoll_wait系统调用，获取到达事件信息</h4>
+<h3 id="section-8">解决方案</h3>
 ]]></content:encoded>
     </item>
     
