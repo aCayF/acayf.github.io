@@ -104,14 +104,23 @@ int epoll_wait(int epfd, struct epoll_event *events,
 ## epoll实现原理
  
 ### 数据结构
+
 #### 双向循环列表
+
 #### 红黑树
+
 ### 核心结构体
+
 #### eventpoll
+
 #### epitem
+
 ### 关键流程
+
 #### epoll实例管理监听事件
+
 #### epoll实例等待、被唤醒
+
 #### epoll实例返回到达事件
 
 ----------------
@@ -119,6 +128,9 @@ int epoll_wait(int epfd, struct epoll_event *events,
 ## epoll动态追踪
 
 ### 追踪目标
+
 #### 1. 探测epoll系统调用工作流程
+
 #### 2. 探测epoll_wait系统调用，获取到达事件信息
+
 ### 解决方案
