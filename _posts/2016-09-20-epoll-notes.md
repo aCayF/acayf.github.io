@@ -317,7 +317,7 @@ static int ep_send_events_proc(struct eventpoll *ep, struct list_head *head,
     }
 
     return eventcnt;
-
+}
 ```
 
 回调ep_send_events_proc返回成功传送的事件数，回调在被执行之前head链表里存放着待传送的事件链，回调在被执行之后head链表存放未传送的事件链，所以探测回调执行前后head链表的变化就能获取成功发送的事件信息，这里有个特殊情况，就是当事件poll方法返回的操作并不是期望的操作时，如期望可读事件却返回可写事件，则revent为0，该到达事件被忽略，且不会被传送到用户层
