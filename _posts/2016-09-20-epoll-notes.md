@@ -228,7 +228,99 @@ static int ep_poll_callback(wait_queue_t *wait, unsigned mode, int sync, void *k
 }
 ```
 
-#### epoll实例返回到达事件
+#### epoll实例返回到达事件信息
+
+ep_send_events负责将到达事件对应的用户自定义信息传送到用户层
+
+```c
+static int ep_send_events(struct eventpoll *ep,
+              struct epoll_event __user *events, int maxevents)
+{
+    struct ep_send_events_data esed;
+    esed.maxevents = maxevents;
+    esed.events = events;
+    return ep_scan_ready_list(ep, ep_send_events_proc, &esed);
+}
+```
+
+ep_send_events实质是调用ep_scan_ready_list函数，额外的传入了ep_send_events_proc回调，ep_scan_ready_list函数体内会执行ep_send_events_proc回调，我们先看看ep_scan_ready_list函数体的实现
+
+```c
+static int ep_scan_ready_list(struct eventpoll *ep,
+                  int (*sproc)(struct eventpoll *,
+                       struct list_head *, void *),
+                  void *priv)
+{
+    LIST_HEAD(txlist);
+    mutex_lock(&ep->mtx);
+    
+    spin_lock_irqsave(&ep->lock, flags);
+    list_splice_init(&ep->rdllist, &txlist);//1.将rdllist指向的list转接到txlist上，清空rdllist
+    ep->ovflist = NULL;//2.允许ep_poll_callback往ovflist链入到达事件epitem
+    spin_unlock_irqrestore(&ep->lock, flags);
+    
+    //考虑到执行回调(往用户层传送信息)的时间会比较长，在这段时间内很有可能有事件到达，因此在这段时间内不能加锁，所以进行了前两步操作，保证了在回调执行时间内到达的事件只会链入ovflist，此时的rdllist只允许回调本身链入Level Trigger事件
+    error = (*sproc)(ep, &txlist, priv);//执行ep_send_events_proc回调
+
+    spin_lock_irqsave(&ep->lock, flags);
+    /*将ovflist链接的到达事件链入rdllist*/
+    ep->ovflist = EP_UNACTIVE_PTR;//禁止ep_poll_callback往ovflist链入到达事件epitem
+    list_splice(&txlist, &ep->rdllist);//将txlist指向的残留list转接回rdllist
+
+    if (!list_empty(&ep->rdllist)) {
+        if (waitqueue_active(&ep->wq))
+            wake_up_locked(&ep->wq);
+        if (waitqueue_active(&ep->poll_wait))
+            pwake++;
+    }
+    spin_unlock_irqrestore(&ep->lock, flags);
+
+    mutex_unlock(&ep->mtx);
+    if (pwake)
+        ep_poll_safewake(&ep->poll_wait);
+
+    return error;
+}
+
+```
+
+真正将到达事件信息传送给用户层的函数为ep_send_events_proc
+
+```c
+static int ep_send_events_proc(struct eventpoll *ep, struct list_head *head,
+                   void *priv)
+{
+    //head=txlist，head链接着转接过来的ep->rdllist链表，即存放到达事件链
+    for (eventcnt = 0, uevent = esed->events;
+         !list_empty(head) && eventcnt < esed->maxevents;) {
+        epi = list_first_entry(head, struct epitem, rdllink);//得到到达事件的epitem结构体
+
+        list_del_init(&epi->rdllink);//从到达事件链中摘除该事件
+
+        revents = epi->ffd.file->f_op->poll(epi->ffd.file, NULL) &
+            epi->event.events;//调用事件对应驱动实现的poll方法，返回值表征可立即执行的操作，如可读操作返回POLLIN，可写操作返回POLLOUT
+            
+        if (revents) {
+            if (__put_user(revents, &uevent->events) ||//传送poll方法返回的flag
+                __put_user(epi->event.data, &uevent->data)) {//传送用户自定义事件信息
+                list_add(&epi->rdllink, head);//将失败事件添入到达事件链中
+                return eventcnt ? eventcnt : -EFAULT;
+            }
+            eventcnt++;//记录成功传送事件数
+            uevent++;//指针移向下一epoll_event结构体
+            if (epi->event.events & EPOLLONESHOT)
+                epi->event.events &= EP_PRIVATE_BITS;
+            else if (!(epi->event.events & EPOLLET)) {
+                list_add_tail(&epi->rdllink, &ep->rdllist);//向ep->rdlist添加Level Triger事件
+            }
+        }
+    }
+
+    return eventcnt;
+
+```
+
+回调ep_send_events_proc返回成功传送的事件数，回调在被执行之前head链表里存放着待传送的事件链，回调在被执行之后head链表存放未传送的事件链，所以探测回调执行前后head链表的变化就能获取成功发送的事件信息，这里有个特殊情况，就是当事件poll方法返回的操作并不是期望的操作时，如期望可读事件却返回可写事件，则revent为0，该到达事件被忽略，且不会被传送到用户层
 
 ----------------
 
