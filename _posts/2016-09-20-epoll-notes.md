@@ -39,7 +39,7 @@ int epoll_create(int size);
 
 关键参数说明：size无意义，但必须大于0
 
-返回值：所创实例对应的文件描述符，即epoll_ctl()和epoll_wait()的epfd传参
+返回值：所创实例对应的文件描述符，即epoll_ctl()和epoll_wait()所需的epfd传参
 
 参考链接：[epoll_create](http://man7.org/linux/man-pages/man2/epoll_create.2.html)
 
@@ -56,8 +56,8 @@ int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event);
 关键参数说明：
 
 * op决定了这次epoll_ctl操作是添加还是删除还是修改
-* fd为所要监听事件的文件描述符
-* event结构体里存放用户定义的与该监听事件相关的信息，可称为用户自定义事件信息，存放与否且存放何种信息完全是用户行为，结构体定义如下
+* fd为所要操作的监听事件的文件描述符
+* event结构体里存放用户定义的与该监听事件相关的信息，可称为用户自定义事件信息，存放何种信息完全是用户行为，结构体定义如下
 
 ```c
 typedef union epoll_data {
@@ -86,11 +86,11 @@ int epoll_wait(int epfd, struct epoll_event *events,
                int maxevents, int timeout);
 ```
                       
-功能描述：等待直到有监听事件到达或等待超时或调用被中断，至多返回maxevents个事件
+功能描述：等待直到有监听事件到达或等待超时或调用被中断，至多返回maxevents个事件，且到达的事件信息会存放在event结构体中
 
 关键参数说明：
 
-* event指向到达事件对应的用户自定义事件信息，结构体定义如epoll_ctl小节
+* event指向到达事件对应的用户自定义事件信息，由内核负责传入数据，结构体定义如epoll_ctl小节
 * timeout设定超时值，为0则不管监听事件到达与否都立即返回，为-1则无限等待直到有监听事件到达
 
 返回值：返回到达的监听事件数
@@ -119,7 +119,7 @@ int epoll_wait(int epfd, struct epoll_event *events,
 
 #### epoll实例管理监听事件
 
-#### epoll实例等待、被唤醒
+#### epoll实例等待以及被唤醒
 
 #### epoll实例返回到达事件
 
@@ -129,8 +129,8 @@ int epoll_wait(int epfd, struct epoll_event *events,
 
 ### 追踪目标
 
-#### 1. 探测epoll系统调用工作流程
+#### 1. 追踪epoll系统调用工作流程
 
-#### 2. 探测epoll_wait系统调用，获取到达事件信息
+#### 2. 追踪epoll_wait系统调用，获取到达事件fd信息
 
 ### 解决方案
