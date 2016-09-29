@@ -153,6 +153,81 @@ epoll_event由epoll_create创建且存放在epoll_create返回的epfd所对应�
 
 #### epoll实例等待以及被唤醒
 
+执行epoll_wait系统调用会进入以下代码片段
+
+```c
+SYSCALL_DEFINE4(epoll_wait, int, epfd, struct epoll_event __user *, events,
+        int, maxevents, int, timeout)
+{
+    /*验证maxevents传参*/
+    /*验证events传参*/
+    /*验证epfd传参*/
+    file = fget(epfd);
+    ep = file->private_data;
+    error = ep_poll(ep, events, maxevents, timeout);
+    return error;
+}
+```
+
+从代码中可以看出epoll_wait核心是调用ep_poll函数
+
+```c
+static int ep_poll(struct eventpoll *ep, struct epoll_event __user *events,
+           int maxevents, long timeout)
+{
+    /*计算timeout,to,slack值*/
+fetch_events:
+    spin_lock_irqsave(&ep->lock, flags);
+    if (!ep_events_available(ep)) {
+        /*将当前进程加入到wait对列*/
+        __add_wait_queue(&ep->wq, &wait);
+
+        for (;;) {
+            /*?????????*/
+            set_current_state(TASK_INTERRUPTIBLE);
+            if (ep_events_available(ep) || timed_out)
+                break;
+            if (signal_pending(current)) {
+                res = -EINTR;
+                break;
+            }
+            spin_unlock_irqrestore(&ep->lock, flags);
+            if (!schedule_hrtimeout_range(to, slack, HRTIMER_MODE_ABS))
+                timed_out = 1;
+            spin_lock_irqsave(&ep->lock, flags);
+        }
+        __remove_wait_queue(&ep->wq, &wait);
+        set_current_state(TASK_RUNNING);
+    }
+    eavail = ep_events_available(ep);
+    spin_unlock_irqrestore(&ep->lock, flags);
+    if (!res && eavail &&
+        !(res = ep_send_events(ep, events, maxevents)) && !timed_out)
+        goto fetch_events;//res=0,即没有signal_pending
+                          //eavail=1,即有事件到达
+                          //ep_send_events返回0,即没有一个到达事件被传送到用户层
+                          //timed_out=0,即未超时
+
+    return res;
+}
+```
+
+从代码中可以总结出ep_poll返回即epoll_wait返回可能的情况有如下三种：
+
+1. 至少有一件到达事件被传送到用户层，函数返回值res为传送事件数
+2. 超时，函数返回值res为0
+3. 有signal_pending，函数返回值res为-EINTR
+
+同时可以得出如果epoll_wait出现多次调用ep_send_events情况，只有在最后一次调用中才有可能将到达事件信息传送到用户层
+
+ep_poll_callback负责唤醒等待中的epoll_wait
+
+```c
+static int ep_poll_callback(wait_queue_t *wait, unsigned mode, int sync, void *key)
+{
+}
+```
+
 #### epoll实例返回到达事件
 
 ----------------
