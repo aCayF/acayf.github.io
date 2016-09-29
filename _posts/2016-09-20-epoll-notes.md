@@ -333,3 +333,74 @@ static int ep_send_events_proc(struct eventpoll *ep, struct list_head *head,
 #### 2. 追踪epoll_wait系统调用，获取到达事件fd信息
 
 ### 解决方案
+
+如果用户在event_poll结构体里存放了fd信息，则只需要追踪epoll_wait返回的结构体
+
+```stap
+global epoll
+
+probe syscall.epoll_wait
+{
+    if(target() != pid()) next
+    epoll[tid()] = 1
+}
+
+probe syscall.epoll_wait.return
+{
+    tid = tid()
+    if(!(tid in epoll)) next
+    delete epoll[tid]
+    
+    n = $return
+    if(n<=0) next
+
+    printf("[%d] t%d epoll send fds: [", gettimeofday_us(), tid)
+    for(i=0; i<n; i++) {
+        fd = @cast($events, "epoll_event", "<sys/epoll.h>")[i]->data->fd
+        printf("%d,", fd)
+    }
+    printf("]\n")
+}
+```
+
+然而会遇到用户不在event_poll结构体里存放fd的情况，所以在这种情况下只能通过追踪内核函数来获取到达事件信息
+
+```stap
+global epoll
+global fds
+
+probe syscall.epoll_wait
+{
+    if(target() != pid()) next
+    epoll[tid()] = 1
+}
+
+probe kernel.function("ep_send_events_proc")
+{
+    tid = tid()
+    if(!(tid in epoll)) next
+
+    fds[tid] = extract_fd_from_rdllist($head)
+}
+
+/* TODO : remove fd which return 0 revent after calling poll method */
+probe kernel.function("ep_send_events_proc").return
+{
+    tid = tid()
+    if(!(tid in epoll)) next
+
+    if($return > 0) {
+        printf("[%d] t%d epoll send fds: [%s][0:%d]\n", gettimeofday_us(), tid, fds[tid], $return)
+    }
+
+    delete fds[tid]
+}
+
+probe syscall.epoll_wait.return
+{
+    tid = tid()
+    if(!(tid in epoll)) next
+
+    delete epoll[tid]
+}
+```
