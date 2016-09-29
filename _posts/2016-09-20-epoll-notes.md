@@ -113,7 +113,39 @@ int epoll_wait(int epfd, struct epoll_event *events,
 
 #### eventpoll
 
+```c
+    struct eventpoll {
+        spinlock_t lock;//自旋锁，实现对wq，rdllist，ovflist的互斥访问？
+        struct mutex mtx;//互斥锁，实现对epoll实例管理的事件结构体epitem的互斥访问？
+        wait_queue_head_t wq;
+        wait_queue_head_t poll_wait;
+        struct list_head rdllist;//到达事件链
+        struct rb_root rbr;
+        struct epitem *ovflist;//传送事件到用户层时的临时到达事件链
+        struct user_struct *user;
+        struct file *file;
+        int visited;
+        struct list_head visited_list_link;
+    };
+```
+
+epoll_event由epoll_create创建且存放在epoll_create返回的epfd所对应的struct file的private_data成员中
+
 #### epitem
+
+```c
+    struct epitem {
+        struct rb_node rbn;
+        struct list_head rdllink;//用于将epitem链入rdllist链表的链表头
+        struct epitem *next;//用于将eptiem链入ovflist链表的指针
+        struct epoll_filefd ffd;//存放事件struct file与fd信息
+        int nwait;
+        struct list_head pwqlist;
+        struct eventpoll *ep;
+        struct list_head fllink;
+        struct epoll_event event;//存放用户自定义事件信息
+    };
+```
 
 ### 关键流程
 
